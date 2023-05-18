@@ -1,3 +1,8 @@
+import json
+from itertools import chain, islice
+from random import sample
+from typing import Iterable
+
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import getSampleStyleSheet
@@ -10,6 +15,28 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+FREE_FACT = "Knows David or Vicky!"
+NUM_CARDS = 5
+
+
+# https://docs.python.org/3/library/itertools.html#itertools-recipes
+# until py 3.12
+def batched(iterable: list[str], n) -> Iterable[list[str]]:
+    "Batch data into tuples of length n. The last batch may be shorter."
+    # batched('ABCDEFG', 3) --> ABC DEF G
+    if n < 1:
+        raise ValueError("n must be at least one")
+    it = iter(iterable)
+    while batch := list(islice(it, n)):
+        yield batch
+
+
+def pick_facts(facts: list[str]) -> list[list[str]]:
+    chosen = sample(facts, 24)
+    chosen.insert(12, FREE_FACT)
+    return list(batched(chosen, 5))
+
+
 # mostly written by chatgpt
 
 
@@ -20,8 +47,8 @@ def build_page(data):
     cell_style.alignment = 1  # Center alignment
 
     # Define the dimensions of the bingo card table
-    table_width = 5.5 * inch
-    table_height = 5.5 * inch
+    table_width = 6 * inch
+    table_height = 7 * inch
 
     # Create a table to hold the bingo card data
     table_data = []
@@ -40,7 +67,7 @@ def build_page(data):
         TableStyle(
             [
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("TOPPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 10),  # top padding
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
                 ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
@@ -59,9 +86,6 @@ def build_page(data):
     # Create a story with the title, table, and page break
     story = [title, table, PageBreak()]
 
-    # Create a story with the table and page break
-    story = [Paragraph("BINGO Card", styles["Title"]), table, PageBreak()]
-
     return story
 
 
@@ -70,34 +94,17 @@ def main():
     doc = SimpleDocTemplate("result.pdf", pagesize=LETTER)
 
     # Define the data for the bingo cards
-    card_data = [
-        [
-            ["Z", "I", "N", "G", "O"],
-            ["1", "16", "31", "46", "61"],
-            ["5", "20", "FREE", "50", "65"],
-            ["10", "25", "40", "55", "70"],
-            ["15", "30", "45", "60", "75"],
-        ],
-        [
-            ["R", "I", "N", "G", "O"],
-            ["2", "17", "32", "47", "62"],
-            ["6", "21", "FREE", "51", "66"],
-            ["11", "26", "41", "56", "71"],
-            ["16", "31", "46", "61", "76"],
-        ],
-        # Add more card data as needed
-    ]
-
-    # Create a list to hold all the pages
-    pages = []
+    with open("facts.json") as f:
+        facts = json.loads(f.read())
+    assert len(facts) >= 24, "must have at least 24 facts for a 5x5 grid + free square"
 
     # Generate the pages for each card
-    for data in card_data:
-        page = build_page(data)
-        pages.extend(page)
-
-    # Build the document with the pages
-    doc.build(pages)
+    doc.build(
+        list(
+            # from_iterable gives me the flat list I need
+            chain.from_iterable(build_page(pick_facts(facts)) for _ in range(NUM_CARDS))
+        )
+    )
 
     print("Bingo cards created successfully!")
 
